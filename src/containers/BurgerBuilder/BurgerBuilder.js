@@ -3,6 +3,9 @@ import Burger from '../../components/Burger/Burger';
 import BuildControllers from '../../components/Burger/BuildControllers/BuildControllers';
 import Modal from '../../components/UI/Modal/Modal';
 import OrderSummary from '../../components/Burger/OrderSummary/OrderSummary';
+import axios from '../../axios-order';
+import Spinner from '../../components/UI/Spinner/Spinner';
+import WithErrorHandler from '../hoc/WithErrorHandler/WithErrorHandler';
 
 const INGREDIENT_PRICE = {
     salad: 0.5,
@@ -12,15 +15,21 @@ const INGREDIENT_PRICE = {
 }
 class BurgerBuilder extends React.Component {
     state = {
-        ingredients: {
-            salad: 0,
-            bacon: 0,
-            cheese: 0,
-            meat: 0
-        },
+        ingredients: null,
         totalPrice: 4,
         purchasable: false,
-        purchasing: false
+        purchasing: false,
+        loading: false,
+        error: false
+    }
+    componentDidMount() {
+        axios.get('https://burger-5f08f.firebaseio.com/ingredients.json')
+            .then(response => {
+                this.setState({
+                    ingredients: response.data
+                })
+            })
+            .catch(error => { this.setState({ error }) })
     }
 
     updatePurchaseHandler = () => {
@@ -84,7 +93,26 @@ class BurgerBuilder extends React.Component {
         })
     }
     purchaseContinueHandler = () => {
-        alert('Continue purchasing!!!')
+        this.setState({
+            loading: true
+        })
+        const order = {
+            ingredients: this.state.ingredients,
+            price: this.state.totalPrice,
+            customer: {
+                name: 'Max',
+                address: {
+                    street: 'New LA',
+                    zipcode: '1234',
+                    country: 'Germany'
+                },
+                email: 'test@test.com'
+            },
+            devileryMethod: 'fastest'
+        }
+        axios.post('orders.json', order)
+            .then(() => this.setState({ loading: false, purchasing: false }))
+            .catch(() => this.setState({ loading: false, purchasing: false }))
     }
     render() {
         const disabledInfo = {
@@ -99,25 +127,34 @@ class BurgerBuilder extends React.Component {
                     show={this.state.purchasing}
                     click={this.purchaseCancelHandler}
                 >
-                    <OrderSummary
-                        ingredients={this.state.ingredients}
-                        cancel={this.purchaseCancelHandler}
-                        continue={this.purchaseContinueHandler}
-                        totalPrice={this.state.totalPrice.toFixed(2)}
-                    />
+                    {this.state.loading ? <Spinner /> :
+                        this.state.ingredients &&
+                        <OrderSummary
+                            ingredients={this.state.ingredients}
+                            cancel={this.purchaseCancelHandler}
+                            continue={this.purchaseContinueHandler}
+                            totalPrice={this.state.totalPrice.toFixed(2)}
+                        />
+                    }
                 </Modal>
-                <Burger ingredients={this.state.ingredients} />
-                <BuildControllers
-                    price={this.state.totalPrice}
-                    addIngredient={this.addIngredientHandler}
-                    removeIngredient={this.removeIngredientHandler}
-                    disabledInfo={disabledInfo}
-                    showOrderNow={this.state.purchasable}
-                    purchasing={this.purchaseHandler}
-                />
+                {this.state.error ? <p>Ingredients can't be loaded</p> :
+                    (this.state.ingredients ?
+                        <React.Fragment>
+                            <Burger ingredients={this.state.ingredients} />
+                            <BuildControllers
+                                price={this.state.totalPrice}
+                                addIngredient={this.addIngredientHandler}
+                                removeIngredient={this.removeIngredientHandler}
+                                disabledInfo={disabledInfo}
+                                showOrderNow={this.state.purchasable}
+                                purchasing={this.purchaseHandler}
+                            />
+                        </React.Fragment> : <Spinner />
+
+                    )}
             </React.Fragment>
         )
     }
 }
 
-export default BurgerBuilder;
+export default WithErrorHandler(BurgerBuilder, axios);
